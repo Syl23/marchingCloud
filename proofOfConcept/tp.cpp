@@ -30,7 +30,8 @@
 
 #include "src/matrixUtilities.h"
 
-#include "cuda/cuda.h"
+#include "cuda/cudaKdtree.h"
+#include "cuda/cudaRayMarching.h"
 
 void ray_trace_from_camera();
 
@@ -50,6 +51,7 @@ std::vector< Vec3 > gridouNormals;
 
 
 BasicANNkdTree kdtree;
+kd_tree_node * cudaKd_tree = NULL;
 
 
 
@@ -58,8 +60,8 @@ BasicANNkdTree kdtree;
 // -------------------------------------------
 
 static GLint window;
-static unsigned int SCREENWIDTH = 150;
-static unsigned int SCREENHEIGHT = 100;
+static unsigned int SCREENWIDTH = 40;
+static unsigned int SCREENHEIGHT = 40;
 static Camera camera;
 static bool mouseRotatePressed = false;
 static bool mouseMovePressed = false;
@@ -295,7 +297,10 @@ void key (unsigned char keyPressed, int x, int y) {
         break;
 
     case 'r':
-        ray_trace_from_camera();
+        camera.apply();
+        cuda_ray_trace_from_camera(glutGet(GLUT_WINDOW_WIDTH),glutGet(GLUT_WINDOW_HEIGHT),&cameraSpaceToWorldSpace, &screen_space_to_worldSpace);
+
+        //ray_trace_from_camera();
         break;
 
     default:
@@ -380,7 +385,10 @@ void HPSS(
 
     for(int itt = 0 ; itt < nbIterations ; itt++){
 
-        kdtree.knearest(precPoint, knn,id_nearest_neighbors,square_distances_to_neighbors);
+        //kdtree.knearest(precPoint, knn,id_nearest_neighbors,square_distances_to_neighbors);
+
+        getKnn(cudaKd_tree, knn, precPoint[0],precPoint[1],precPoint[2], id_nearest_neighbors, (float *)square_distances_to_neighbors);
+
 
         nextPoint  = Vec3(0,0,0);
         nextNormal = Vec3(0,0,0);
@@ -388,6 +396,7 @@ void HPSS(
         float totWeight = 0.0;
 
         for(int i = 0 ; i<knn ; i ++){
+
             auto proj = project(precPoint,normals[id_nearest_neighbors[i]],positions[id_nearest_neighbors[i]]);
             float weight = 0.0;
             float r = sqrt(square_distances_to_neighbors[i])/h;
@@ -448,7 +457,10 @@ double signedDist(
 {
     Vec3 projPoint = Vec3(0,0,0);
     Vec3 projNormal= Vec3(0,0,0);
+    
     HPSS(inputPoint,projPoint,projNormal,positions,normals,kdtree,kerneltype,h,nbIterations,knn);
+
+
     
 
     // std::cout<<"inputPoint : "<<inputPoint<<std::endl;
@@ -727,7 +739,7 @@ int main (int argc, char ** argv) {
         //loadPN("pointsets/igea_subsampled_extreme.pn" , positions , normals);
         loadPN("pointsets/igea.pn" , positions , normals);
 
-        cudaMain();
+        //cudaMain();
 
         /*
         for(auto p : positions){
@@ -741,20 +753,41 @@ int main (int argc, char ** argv) {
         }
         */
 
+        Vec3 testPoint = Vec3(0,0,1);
+        int nbnn = 20;
+
 
         //loadPN("pointsets/dino_subsampled_extreme.pn" , positions2 , normals2);
         kdtree.build(positions);
 
+        std::cout<<"Start kd-tree building"<<std::endl;
+        auto my_kd_tree = make_kd_tree(positions);
+        cudaKd_tree = send_kd_tree(my_kd_tree);
+        std::cout<<"End kd-tree building"<<std::endl;
 
-        std::cout<<"Start kd_tree"<<std::endl;
 
-            auto my_kd_tree = make_kd_tree(positions);
+        /* test
 
-        std::cout<<"End kd_tree"<<std::endl;
+            ANNidxArray id_nearest_neighbors           = new ANNidx[nbnn];
+            ANNdistArray square_distances_to_neighbors = new ANNdist[nbnn];
 
-        auto gpuKdAdr = send_kd_tree(my_kd_tree);
+            int* id_nearest_neighborsGPU           = new int[nbnn];
+            float* square_distances_to_neighborsGPU = new float[nbnn];
 
-        
+            kdtree.knearest(testPoint, nbnn,id_nearest_neighbors,square_distances_to_neighbors);
+            std::cout<<"CPU : "<<std::endl<<std::endl;
+            for(int i = 0 ; i < nbnn ; i ++){
+                std::cout<<"index : "<<id_nearest_neighbors[i]<<" dist : "<<square_distances_to_neighbors[i]<<std::endl;
+            }
+
+            std::cout<<std::endl<<"GPU : "<<std::endl<<std::endl;
+
+            getKnn(cudaKd_tree, nbnn, testPoint[0],testPoint[1],testPoint[2], id_nearest_neighborsGPU, square_distances_to_neighborsGPU);
+
+            for(int i = 0 ; i < nbnn ; i ++){
+                std::cout<<"index : "<<id_nearest_neighborsGPU[i]<<" dist : "<<square_distances_to_neighborsGPU[i]<<std::endl;
+            }
+        */
 
 
         // Create a second pointset that is artificial, and project it on pointset1 using MLS techniques:

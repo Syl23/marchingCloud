@@ -24,8 +24,7 @@ Vec3 normale(Vec3 pos){
 
 Intersection intersect(Vec3 pos, Vec3 dir);
 
-void ray_trace_from_camera()
-{
+void ray_trace_from_camera(){
 
     int w = glutGet(GLUT_WINDOW_WIDTH);
     int h = glutGet(GLUT_WINDOW_HEIGHT);
@@ -51,6 +50,7 @@ void ray_trace_from_camera()
         // Précalc thread
         for (int x = 0; x < w; x++)
         {
+            std::cout<<"pixel"<<std::endl;
             for (unsigned int s = 0; s < PARAM_NUMBER_SAMPLES; ++s)
             {
                 float u = ((float)(x) + (float)(rand()) / (float)(RAND_MAX)) / w;
@@ -104,15 +104,12 @@ void ray_trace_from_camera()
     fill(image.begin(), image.end(), Vec3(0, 0, 0));
 }
 
-
-
-
 Intersection intersect(Vec3 pos, Vec3 dir){
 
     double seuilMin = 0.005;
     double seuilMax = 10;
 
-    int maxItt = 100;
+    int maxItt = 10;
 
     bool conv = false;
     bool div  = false;
@@ -132,7 +129,5 @@ Intersection intersect(Vec3 pos, Vec3 dir){
             i++;
         }        
     }
-
-
     return {conv,pos,(float)i/(float)maxItt};
 }

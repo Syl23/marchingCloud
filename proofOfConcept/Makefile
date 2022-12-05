@@ -13,8 +13,9 @@ CIBLE = tp
 SRCS =  src/Camera.cpp tp.cpp src/Trackball.cpp ann/src/ANN.cpp ann/src/brute.cpp ann/src/kd_tree.cpp ann/src/kd_util.cpp ann/src/kd_split.cpp \
 	ann/src/kd_dump.cpp ann/src/kd_search.cpp ann/src/kd_pr_search.cpp ann/src/kd_fix_rad_search.cpp \
 	ann/src/bd_tree.cpp ann/src/bd_search.cpp ann/src/bd_pr_search.cpp ann/src/bd_fix_rad_search.cpp \
-	ann/src/perf.cpp cuda/main.cu
-LIBS =  -L/usr/lib -lglut -lGLU -lGL -lm -lpthread -lgsl -lgslcblas
+	ann/src/perf.cpp \
+	cuda/cudaKdtree.cu cuda/cudaRayMarching.cu
+LIBS =  -g -L/usr/lib -lglut -lGLU -lGL -lm -lpthread -lgsl -lgslcblas
 
 #########################################################"
 
