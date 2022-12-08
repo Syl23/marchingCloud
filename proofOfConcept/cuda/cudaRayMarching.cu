@@ -5,17 +5,90 @@
 #include <string>
 #include <vector>
 
+#include "cudaKdtree.h"
+#include "cudaKdtree.hcu"
+
 struct cIntersection {
     bool intersected;
     cVec3 position;
     float convTime;
 };
 
-__device__ float globalDist(cVec3 pos){
-    return pos.length() - 1.0; 
+struct PointCloudData{
+    kd_tree_node* kdTree;
+    cVec3 * positions;
+    cVec3 * normals;
+};
+
+__device__ float HPSSDist(
+    cVec3 inputPoint,
+    PointCloudData * pcd)
+{
+    int kerneltype = 0;
+    float h = 100;
+    unsigned int nbIterations = 5;
+    unsigned int knn= 10;
+
+    int* id_nearest_neighbors           = new int[knn];
+    float* square_distances_to_neighbors = new float[knn];
+
+    cVec3 precPoint = inputPoint;
+
+    cVec3 nextPoint;
+    cVec3 nextNormal;
+
+    for(int itt = 0 ; itt < nbIterations ; itt++){
+
+        //kdtree.knearest(precPoint, knn,id_nearest_neighbors,square_distances_to_neighbors);
+
+        getKnn(cudaKd_tree, knn, precPoint[0],precPoint[1],precPoint[2], id_nearest_neighbors, (float *)square_distances_to_neighbors);
+
+
+        nextPoint  = cVec3(0,0,0);
+        nextNormal = cVec3(0,0,0);
+
+        float totWeight = 0.0;
+
+        for(int i = 0 ; i<knn ; i ++){
+
+            auto proj = project(precPoint,normals[id_nearest_neighbors[i]],positions[id_nearest_neighbors[i]]);
+            float weight = 0.0;
+            float r = sqrt(square_distances_to_neighbors[i])/h;
+            switch (kerneltype){
+            case 0:
+                
+                weight = exp((-(r*r))/(h*h));
+                break;
+            case 1:
+                weight = 0;
+                break;
+            case 2:
+                weight = 0;
+                break;
+            }
+            totWeight  += weight;
+            nextPoint  += weight*proj;
+            nextNormal += weight*normals[id_nearest_neighbors[i]];
+        }
+        nextPoint = nextPoint / totWeight;
+        nextNormal.normalize();
+        precPoint = nextPoint;
+    }
+    
+    //signedDist(pos,positions,normals,kdtree,0,100.0,5,10);
+    //HPSS(inputPoint,projPoint,projNormal,positions,normals,kdtree,kerneltype,h,nbIterations,knn);
+
+    return(dot(inputPoint-nextPoint,nextNormal));
+
+} 
+
+__device__ float globalDist(cVec3 pos, PointCloudData * pcd){
+    return HPSS(pos, pcd);
+
+    //return pos.length() - 1.0; 
 }
 
-__device__ cIntersection intersect(cVec3 pos, cVec3 dir){
+__device__ cIntersection intersect(cVec3 pos, cVec3 dir, PointCloudData * pcd){
     double seuilMin = 0.005;
     double seuilMax = 10;
 
@@ -26,7 +99,7 @@ __device__ cIntersection intersect(cVec3 pos, cVec3 dir){
 
     int i = 0;
     while(!conv && !div){
-        double dist = globalDist(pos);
+        double dist = globalDist(pos, pcd);
 
         if(dist > seuilMax || i > maxItt){
             div = true;
@@ -58,30 +131,45 @@ __device__ cVec3 normale(cVec3 pos){
     return res;
 }
 
-__global__ void cuda_ray_trace(float* rayPos, float * rayDir, float * image, int imgSize){
-    int threadLineLen = 32;
+__device__ int getGlobalIdx_1D_2D(){
+    return blockIdx.x * blockDim.x * blockDim.y
+    + threadIdx.y * blockDim.x + threadIdx.x;
+}
 
-    int x = threadIdx.x;
-    int y = threadIdx.y;
+__global__ void cuda_ray_trace(float* rayPos, float * rayDir, float * image, int imgSize, PointCloudData * pcd){
 
-    int blockInd = blockIdx.x; // block index
-
-    int ind = y*threadLineLen + x; //thread index
-
-    int pixelInd = blockInd * 1024 + ind;
+    int index = getGlobalIdx_1D_2D();
     
-    if(pixelInd < imgSize){
-        image[ind*3+0] = 1.0f;
-        image[ind*3+1] = 0.0f;
-        image[ind*3+2] = 0.0f;
+    if(index < imgSize){
+        cVec3 pos = cVec3(rayPos[0],rayPos[1],rayPos[2]);
+        cVec3 dir = cVec3(rayDir[index*3+0], rayDir[index*3+1], rayDir[index*3+2]);
+
+        auto it = intersect(pos, dir, pcd);
+
+        if(it.intersected){
+            image[index*3+0] = 1.0;
+            image[index*3+1] = 1.0;
+            image[index*3+2] = 1.0;
+        }else{
+            image[index*3+0] = 0.3;
+            image[index*3+1] = 0.3;
+            image[index*3+2] = 0.3;
+        }
+
+
+
+
+        // image[index*3+0] = rayDir[index*3+0] > 1.0 ? 1.0 : rayDir[index*3+0] < 0.0 ? 0.0 : rayDir[index*3+0] ;
+        // image[index*3+1] = rayDir[index*3+1] > 1.0 ? 1.0 : rayDir[index*3+1] < 0.0 ? 0.0 : rayDir[index*3+1] ;
+        // image[index*3+2] = rayDir[index*3+2] > 1.0 ? 1.0 : rayDir[index*3+2] < 0.0 ? 0.0 : rayDir[index*3+2] ;
     }
 
 }
 //calcul la couleur des pixels, par ray marching
 
-void cuda_ray_trace_from_camera(int w, int h, Vec3 (*cameraSpaceToWorldSpace)(const Vec3&), Vec3 (*screen_space_to_worldSpace)(float, float)){
+void cuda_ray_trace_from_camera(int w, int h, Vec3 (*cameraSpaceToWorldSpace)(const Vec3&), Vec3 (*screen_space_to_worldSpace)(float, float), PointCloudData * pcd){
 
-    std::vector<float> image(3*w*h, 1.0f);   
+    std::vector<float> image(3*w*h, 0.5f);   
     std::vector<float> rayDir(3*w*h);
 
     std::cout << "Ray tracing a " << w << " x " << h << " image" << std::endl;
@@ -94,10 +182,11 @@ void cuda_ray_trace_from_camera(int w, int h, Vec3 (*cameraSpaceToWorldSpace)(co
             float u = ((float)(x) + (float)(rand()) / (float)(RAND_MAX)) / w;
             float v = ((float)(y) + (float)(rand()) / (float)(RAND_MAX)) / h;
             Vec3 dir = screen_space_to_worldSpace(u, v) - pos;
+            dir.normalize();
 
-            rayDir[y*w+x + 0] = dir[0];
-            rayDir[y*w+x + 1] = dir[1];
-            rayDir[y*w+x + 2] = dir[2];
+            rayDir[3*(y*w+x) + 0] = dir[0];
+            rayDir[3*(y*w+x) + 1] = dir[1];
+            rayDir[3*(y*w+x) + 2] = dir[2];
 
         }
     }
@@ -120,20 +209,22 @@ void cuda_ray_trace_from_camera(int w, int h, Vec3 (*cameraSpaceToWorldSpace)(co
 
     //cuda_ray_trace<<<h,w>>>(cudaPos, cudaDirTab, cudaImage, w);
 
-    int nbBlock = std::ceil((w*h) / (32*32));
+    int nbBlock = std::ceil((w*h) / (32.0*32.0));
+
+    std::cout<<"Nb block : "<<nbBlock<<std::endl;
 
     dim3 threadsPerBlock(32, 32);
     dim3 numBlocks(nbBlock, 1);
 
-    cuda_ray_trace<<<numBlocks,threadsPerBlock>>>(cudaPos, cudaDirTab, cudaImage, h*w);
+    cuda_ray_trace<<<numBlocks,threadsPerBlock>>>(cudaPos, cudaDirTab, cudaImage, h*w, pcd);
 
     std::cout<<"GPU termined"<<std::endl;
 
     cudaMemcpy((void *)image.data(), (void *)cudaImage, image.size()*sizeof(float), cudaMemcpyDeviceToHost);
 
-    for(int i = 0 ; i < image.size()/3 ; i ++){
-        std::cout<<image[i*3+0]<<" "<<image[i*3+1]<<" "<<image[i*3+2]<<std::endl;
-    }
+    // for(int i = 0 ; i < image.size()/3 ; i ++){
+    //     std::cout<<image[i*3+0]<<" "<<image[i*3+1]<<" "<<image[i*3+2]<<std::endl;
+    // }
 
 
     std::string filename = "./rendu.ppm";

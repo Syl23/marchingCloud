@@ -1,4 +1,5 @@
 #include "cudaKdtree.h"
+#include "cudaKdtree.hcu"
 
 std::ostream& operator<<(std::ostream& os, const kd_tree_node& kdn){
     os <<"node : \n"<< "\tpoint index : "<<kdn.ind<<"\n\tpoint : ("<<kdn.x<<" "<<kdn.y<<" "<<kdn.z<<")\n\taxis : "<<kdn.axis<<"\n\tleft : "<<kdn.left<<" right : "<<kdn.right;
@@ -212,6 +213,17 @@ pointQueue* __device__ knearest(
     return queue;
 }
 
+__device__ void computeKnn(int * indTab, float * sqDistTab, kd_tree_node * kd_tree, int nb, float x, float y, float z){
+    auto resQueue = knearest(kd_tree,x,y,z,nb);
+    
+    for(int i = 0 ; i < nb ; i ++){
+        indTab[i] = resQueue->ind[i];
+        sqDistTab[i] = resQueue->dist[i];
+    }
+}
+
+//for debug purpuse do not delete
+/* 
 __global__ void computeKnn(int * indTab, float * sqDistTab, kd_tree_node * kd_tree, int nb, float x, float y, float z){
     auto resQueue = knearest(kd_tree,x,y,z,nb);
     
@@ -260,3 +272,4 @@ void getKnn(kd_tree_node * kd_tree, int nb, float x, float y, float z, int * ind
 void getKnn(kd_tree_node * kd_tree, int nb, Vec3 point, int * ind, float * SqDist){
     getKnn(kd_tree,nb, point[0],point[1],point[2], ind,SqDist);
 }
+*/

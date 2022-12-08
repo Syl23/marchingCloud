@@ -35,6 +35,11 @@ struct cVec3 {
 
 };
 
+
+float __device__  dot( cVec3 const & a , cVec3 const & b ) {
+   return a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
+}
+
 cVec3 __device__ operator + (cVec3 const & a , cVec3 const & b) {
    return cVec3(a[0]+b[0] , a[1]+b[1] , a[2]+b[2]);
 }
@@ -48,6 +53,14 @@ cVec3 __device__ operator * (float a , cVec3 const & b) {
 }
 cVec3 __device__ operator * (cVec3 const & a , cVec3 const & b) {
    return cVec3(a[0]*b[0] , a[1]*b[1] , a[2]*b[2]);
+}
+
+cVec3 __device__ project(cVec3 point,cVec3 normalePlan,cVec3 pointPlan){
+    return(point - dot(point - pointPlan, normalePlan)*normalePlan);
+}
+
+cVec3 __device__ operator / (cVec3 const &  a , float b) {
+   return cVec3(a[0]/b , a[1]/b , a[2]/b);
 }
 
 /*

@@ -60,8 +60,8 @@ kd_tree_node * cudaKd_tree = NULL;
 // -------------------------------------------
 
 static GLint window;
-static unsigned int SCREENWIDTH = 40;
-static unsigned int SCREENHEIGHT = 40;
+static unsigned int SCREENWIDTH = 300;
+static unsigned int SCREENHEIGHT = 400;
 static Camera camera;
 static bool mouseRotatePressed = false;
 static bool mouseMovePressed = false;
@@ -385,9 +385,9 @@ void HPSS(
 
     for(int itt = 0 ; itt < nbIterations ; itt++){
 
-        //kdtree.knearest(precPoint, knn,id_nearest_neighbors,square_distances_to_neighbors);
+        kdtree.knearest(precPoint, knn,id_nearest_neighbors,square_distances_to_neighbors);
 
-        getKnn(cudaKd_tree, knn, precPoint[0],precPoint[1],precPoint[2], id_nearest_neighbors, (float *)square_distances_to_neighbors);
+        //getKnn(cudaKd_tree, knn, precPoint[0],precPoint[1],precPoint[2], id_nearest_neighbors, (float *)square_distances_to_neighbors);
 
 
         nextPoint  = Vec3(0,0,0);
@@ -457,6 +457,7 @@ double signedDist(
 {
     Vec3 projPoint = Vec3(0,0,0);
     Vec3 projNormal= Vec3(0,0,0);
+    
     
     HPSS(inputPoint,projPoint,projNormal,positions,normals,kdtree,kerneltype,h,nbIterations,knn);
 
