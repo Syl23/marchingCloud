@@ -30,8 +30,7 @@
 
 #include "src/matrixUtilities.h"
 
-#include "cuda/cudaKdtree.h"
-#include "cuda/cudaRayMarching.h"
+#include "cuda/cudaInterface.h"
 
 void ray_trace_from_camera();
 
@@ -51,7 +50,7 @@ std::vector< Vec3 > gridouNormals;
 
 
 BasicANNkdTree kdtree;
-kd_tree_node * cudaKd_tree = NULL;
+//kd_tree_node * cudaKd_tree = NULL;
 
 
 
@@ -763,7 +762,7 @@ int main (int argc, char ** argv) {
 
         std::cout<<"Start kd-tree building"<<std::endl;
         auto my_kd_tree = make_kd_tree(positions);
-        cudaKd_tree = send_kd_tree(my_kd_tree);
+        auto cudaKd_tree = send_kd_tree(my_kd_tree);
         std::cout<<"End kd-tree building"<<std::endl;
 
 

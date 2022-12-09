@@ -14,7 +14,7 @@ SRCS =  src/Camera.cpp tp.cpp src/Trackball.cpp ann/src/ANN.cpp ann/src/brute.cp
 	ann/src/kd_dump.cpp ann/src/kd_search.cpp ann/src/kd_pr_search.cpp ann/src/kd_fix_rad_search.cpp \
 	ann/src/bd_tree.cpp ann/src/bd_search.cpp ann/src/bd_pr_search.cpp ann/src/bd_fix_rad_search.cpp \
 	ann/src/perf.cpp \
-	cuda/cudaKdtree.cu cuda/cudaRayMarching.cu
+	cuda/allTheCuda.cu
 LIBS =  -g -L/usr/lib -lglut -lGLU -lGL -lm -lpthread -lgsl -lgslcblas
 
 #########################################################"
@@ -24,8 +24,8 @@ LIBDIR = .
 BINDIR = .
 
 # nom du compilateur
-CC = nvcc
-CPP = nvcc
+CC = /usr/local/cuda/bin/nvcc
+CPP = /usr/local/cuda/bin/nvcc
 
 # options du compilateur          
 CFLAGS = -Wall -O3 
@@ -60,7 +60,7 @@ veryclean: clean
 	rm -f $(BINDIR)/$(CIBLE)
 
 dep:
-	nvcc $(CPPFLAGS) -MM $(SRCS)
+	/usr/local/cuda/bin/nvcc $(CPPFLAGS) -MM $(SRCS)
 
 
 # liste des d�pendances g�n�r�e par 'make dep'

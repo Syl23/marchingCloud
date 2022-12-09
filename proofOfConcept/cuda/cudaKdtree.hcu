@@ -1,1 +1,0 @@
-__device__ void getKnn(kd_tree_node * kd_tree, int nb, float x, float y, float z, int * ind, float * SqDist);
