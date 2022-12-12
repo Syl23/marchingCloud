@@ -30,7 +30,30 @@
 
 #include "src/matrixUtilities.h"
 
-#include "cuda/cudaInterface.h"
+extern "C" struct kd_tree_node{
+    int ind;
+
+    float x;
+    float y;
+    float z;
+
+    int axis;
+
+    int left;
+    int right;
+};
+extern "C" struct PointCloudData;
+
+extern "C" void testCuda();
+extern "C" std::vector<kd_tree_node> make_kd_tree(std::vector<Vec3> dots);
+extern "C" kd_tree_node* send_kd_tree(std::vector<kd_tree_node> kd_tree);
+
+extern "C" void cuda_ray_trace_from_camera(int w, int h, Vec3 (*cameraSpaceToWorldSpace)(const Vec3&), Vec3 (*screen_space_to_worldSpace)(float, float), PointCloudData * pcd);
+
+
+
+
+
 
 void ray_trace_from_camera();
 
@@ -297,7 +320,7 @@ void key (unsigned char keyPressed, int x, int y) {
 
     case 'r':
         camera.apply();
-        cuda_ray_trace_from_camera(glutGet(GLUT_WINDOW_WIDTH),glutGet(GLUT_WINDOW_HEIGHT),&cameraSpaceToWorldSpace, &screen_space_to_worldSpace);
+        cuda_ray_trace_from_camera(glutGet(GLUT_WINDOW_WIDTH),glutGet(GLUT_WINDOW_HEIGHT),&cameraSpaceToWorldSpace, &screen_space_to_worldSpace, nullptr);
 
         //ray_trace_from_camera();
         break;
@@ -740,6 +763,7 @@ int main (int argc, char ** argv) {
         loadPN("pointsets/igea.pn" , positions , normals);
 
         //cudaMain();
+        //testCuda();
 
         /*
         for(auto p : positions){

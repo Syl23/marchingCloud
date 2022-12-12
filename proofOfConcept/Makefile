@@ -14,7 +14,7 @@ SRCS =  src/Camera.cpp tp.cpp src/Trackball.cpp ann/src/ANN.cpp ann/src/brute.cp
 	ann/src/kd_dump.cpp ann/src/kd_search.cpp ann/src/kd_pr_search.cpp ann/src/kd_fix_rad_search.cpp \
 	ann/src/bd_tree.cpp ann/src/bd_search.cpp ann/src/bd_pr_search.cpp ann/src/bd_fix_rad_search.cpp \
 	ann/src/perf.cpp \
-	cuda/allTheCuda.cu
+	cuda/cudaRayMarching.cu
 LIBS =  -g -L/usr/lib -lglut -lGLU -lGL -lm -lpthread -lgsl -lgslcblas
 
 #########################################################"
