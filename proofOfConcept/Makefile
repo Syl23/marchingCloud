@@ -9,11 +9,13 @@
 #
 # NE PAS OUBLIER D'AJOUTER LA LISTE DES DEPENDANCES A LA FIN DU FICHIER
 
+# ann/src/ANN.cpp ann/src/brute.cpp ann/src/kd_tree.cpp ann/src/kd_util.cpp ann/src/kd_split.cpp \
+# 	ann/src/kd_dump.cpp ann/src/kd_search.cpp ann/src/kd_pr_search.cpp ann/src/kd_fix_rad_search.cpp \
+# 	ann/src/bd_tree.cpp ann/src/bd_search.cpp ann/src/bd_pr_search.cpp ann/src/bd_fix_rad_search.cpp \
+# 	ann/src/perf.cpp \
+
 CIBLE = tp
-SRCS =  src/Camera.cpp tp.cpp src/Trackball.cpp ann/src/ANN.cpp ann/src/brute.cpp ann/src/kd_tree.cpp ann/src/kd_util.cpp ann/src/kd_split.cpp \
-	ann/src/kd_dump.cpp ann/src/kd_search.cpp ann/src/kd_pr_search.cpp ann/src/kd_fix_rad_search.cpp \
-	ann/src/bd_tree.cpp ann/src/bd_search.cpp ann/src/bd_pr_search.cpp ann/src/bd_fix_rad_search.cpp \
-	ann/src/perf.cpp \
+SRCS =  src/Camera.cpp tp.cpp src/Trackball.cpp  \
 	cuda/cudaRayMarching.cu
 LIBS =  -g -L/usr/lib -lglut -lGLU -lGL -lm -lpthread -lgsl -lgslcblas
 
@@ -24,8 +26,10 @@ LIBDIR = .
 BINDIR = .
 
 # nom du compilateur
-CC = /usr/local/cuda/bin/nvcc
-CPP = /usr/local/cuda/bin/nvcc
+# CC = /usr/local/cuda/bin/nvcc
+# CPP = /usr/local/cuda/bin/nvcc
+CC = nvcc
+CPP = nvcc
 
 # options du compilateur          
 CFLAGS = -Wall -O3 

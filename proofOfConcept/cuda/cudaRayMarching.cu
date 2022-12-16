@@ -1,19 +1,18 @@
 #include <fstream>
 #include <string>
 #include <vector>
-#include <queue>
-#include <algorithm>
-
 #include <cmath>
 #include <iostream>
-
-#include <vector>
 #include <queue>
 #include <algorithm>
+
+#include <random>
+#include <memory>
+#include <functional>
 
 #include "../src/Vec3.h"
 
-struct cVec3 {
+extern "C" struct cVec3 {
    float mVals[3];
 
    __device__ cVec3( float x , float y , float z ) {
@@ -220,7 +219,7 @@ extern "C" std::vector<kd_tree_node> make_kd_tree(std::vector<Vec3> dots){
 
         fileTraitement.pop();
 
-        std::sort (indVec.begin()+plage.first, indVec.begin()+plage.second, std::bind(compareIndVec3,axis,std::placeholders::_1,std::placeholders::_2));
+        std::sort(indVec.begin()+plage.first, indVec.begin()+plage.second, std::bind(compareIndVec3,axis,std::placeholders::_1,std::placeholders::_2));
 
         int med = (plage.first + plage.second)/2;
 
@@ -284,18 +283,48 @@ struct pointQueue{
     int * ind;
     float * dist;
 
-    __device__ pointQueue(int nb){
-        size = nb;
-        nbInQueue = 0;
+    // __device__ pointQueue(int nb){
+    //     size = nb;
+    //     nbInQueue = 0;
 
-        ind = new int[nb];
-        dist = new float[nb];
+    //     ind = (int *) malloc(nb * sizeof(int));
+    //     dist = (float *) malloc(nb * sizeof(float));
 
-        for(int i = 0 ; i < nb ; i ++){
-            dist[i] = -1.0;
-        }
-    }
+    //     for(int i = 0 ; i < nb ; i ++){
+    //         dist[i] = -1.0;
+    //         ind[i] = 0;
+    //     }
+    // }
+    // __device__ pointQueue(){
+    //     int nb = 10;
+    //     size = nb;
+    //     nbInQueue = 0;
+
+    //     ind = (int *) malloc(nb * sizeof(int));
+    //     dist = (float *) malloc(nb * sizeof(float));
+
+    //     for(int i = 0 ; i < nb ; i ++){
+    //         dist[i] = -1.0;
+    //         ind[i] = 0;
+    //     }
+    // }
 };
+
+__device__ void initPointQueue(pointQueue * ptc, int nb){
+    *ptc = {0,0,NULL,NULL};
+
+    ptc->size = nb;
+    ptc->nbInQueue = 0;
+
+    ptc->ind  = (int *) malloc(nb * sizeof(int));
+    ptc->dist = (float * )malloc(nb * sizeof(float));
+
+    for(int i = 0 ; i < nb ; i ++){
+        ptc->dist[i] = -1.0;
+        ptc->ind[i] = 0;
+    }
+}
+
 
 float __device__ getThresholdDist(pointQueue* queue){
     if(queue->nbInQueue == queue->size){
@@ -392,9 +421,14 @@ pointQueue* __device__ knearest(
     kd_tree_node * kd_tree,
     float pointX, float pointY, float pointZ,
     int nbNeighbors
-    ){
+    ){    
 
-    pointQueue* queue = new pointQueue(nbNeighbors); //les points les plus proches
+    //pointQueue* queue = new pointQueue(nbNeighbors); //les points les plus proches
+    //pointQueue* queue = new pointQueue(); //les points les plus proches
+
+    pointQueue* queue;// = new pointQueue();
+    initPointQueue(queue, nbNeighbors);
+
 
     int currentInd = 0; // indice du noeud du kd_tree
     int currentAxis = 0;
@@ -405,7 +439,10 @@ pointQueue* __device__ knearest(
 }
 
 __device__ void computeKnn(int * indTab, float * sqDistTab, kd_tree_node * kd_tree, int nb, float x, float y, float z){
-    auto resQueue = knearest(kd_tree,x,y,z,nb);
+    //auto resQueue = knearest(kd_tree,x,y,z,nb);
+
+    pointQueue* resQueue;// = new pointQueue();
+    initPointQueue(resQueue, nb);
     
     for(int i = 0 ; i < nb ; i ++){
         indTab[i] = resQueue->ind[i];
@@ -479,15 +516,15 @@ struct PointCloudData{
 
 __device__ float HPSSDist(
     cVec3 inputPoint,
-    PointCloudData * pcd)
+    PointCloudData pcd)
 {
     int kerneltype = 0;
     float h = 100;
     unsigned int nbIterations = 5;
-    unsigned int knn= 10;
+    const unsigned int knn= 10;
 
-    int* id_nearest_neighbors           = new int[knn];
-    float* square_distances_to_neighbors = new float[knn];
+    int id_nearest_neighbors[knn];//           = int[knn];//new int[knn];
+    float square_distances_to_neighbors[knn];// = float[knn];//new float[knn];
 
     cVec3 precPoint = inputPoint;
 
@@ -495,11 +532,12 @@ __device__ float HPSSDist(
     cVec3 nextNormal;
 
     for(int itt = 0 ; itt < nbIterations ; itt++){
+        //printf("itt");
 
         //kdtree.knearest(precPoint, knn,id_nearest_neighbors,square_distances_to_neighbors);
 
         //computeKnn(pcd->kdTree, knn, precPoint[0],precPoint[1],precPoint[2], id_nearest_neighbors, (float *)square_distances_to_neighbors);
-        computeKnn(id_nearest_neighbors, (float *)square_distances_to_neighbors, pcd->kdTree, knn, precPoint[0],precPoint[1],precPoint[2]);
+        computeKnn(id_nearest_neighbors, (float *)square_distances_to_neighbors, pcd.kdTree, knn, precPoint[0],precPoint[1],precPoint[2]);
 
 
         nextPoint  = cVec3(0,0,0);
@@ -509,7 +547,7 @@ __device__ float HPSSDist(
 
         for(int i = 0 ; i<knn ; i ++){
 
-            auto proj = project(precPoint,pcd->normals[id_nearest_neighbors[i]],pcd->positions[id_nearest_neighbors[i]]);
+            auto proj = project(precPoint,pcd.normals[id_nearest_neighbors[i]],pcd.positions[id_nearest_neighbors[i]]);
             float weight = 0.0;
             float r = sqrt(square_distances_to_neighbors[i])/h;
             switch (kerneltype){
@@ -526,12 +564,16 @@ __device__ float HPSSDist(
             }
             totWeight  += weight;
             nextPoint  += weight*proj;
-            nextNormal += weight*pcd->normals[id_nearest_neighbors[i]];
+            nextNormal += weight*pcd.normals[id_nearest_neighbors[i]];
         }
         nextPoint = nextPoint / totWeight;
         nextNormal.normalize();
         precPoint = nextPoint;
     }
+    
+    // free(id_nearest_neighbors);
+    // free(square_distances_to_neighbors);
+
     
     //signedDist(pos,positions,normals,kdtree,0,100.0,5,10);
     //HPSS(inputPoint,projPoint,projNormal,positions,normals,kdtree,kerneltype,h,nbIterations,knn);
@@ -544,17 +586,18 @@ __device__ float HPSSDist(
 // }
 
 
-__device__ float globalDist(cVec3 pos, PointCloudData * pcd){
+__device__ float globalDist(cVec3 pos, PointCloudData pcd){
+    //printf("globalDist\n");
     //return HPSSDist(pos, pcd);
 
     float sphere = pos.length() - 1.0;
 
     float cube = max(abs(pos[0])-1,max(abs(pos[1])-1,abs(pos[0])-1));
-    return cube;
-    //return min(sphere,cube); 
+    return sphere;
+    return min(sphere,cube); 
 }
 
-__device__ cIntersection intersect(cVec3 pos, cVec3 dir, PointCloudData * pcd){
+__device__ cIntersection intersect(cVec3 pos, cVec3 dir, PointCloudData pcd){
     double seuilMin = 0.005;
     double seuilMax = 10;
 
@@ -565,6 +608,7 @@ __device__ cIntersection intersect(cVec3 pos, cVec3 dir, PointCloudData * pcd){
 
     int i = 0;
     while(!conv && !div){
+        //printf("int\n");
         double dist = globalDist(pos, pcd);
 
         if(dist > seuilMax || i > maxItt){
@@ -581,7 +625,7 @@ __device__ cIntersection intersect(cVec3 pos, cVec3 dir, PointCloudData * pcd){
     return {conv,pos,(float)i/(float)maxItt};
 }
 
-__device__ cVec3 normale(cVec3 pos, PointCloudData * pcd){
+__device__ cVec3 normale(cVec3 pos, PointCloudData pcd){
     cVec3 eps1 = cVec3(0.01, 0.  , 0.  );
     cVec3 eps2 = cVec3(0.  , 0.01, 0.  );
     cVec3 eps3 = cVec3(0.  , 0.  , 0.01);
@@ -602,7 +646,8 @@ __device__ int getGlobalIdx_1D_2D(){
     + threadIdx.y * blockDim.x + threadIdx.x;
 }
 
-__global__ void cuda_ray_trace(float* rayPos, float * rayDir, float * image, int imgSize, PointCloudData * pcd){
+__global__ void cuda_ray_trace(float* rayPos, float * rayDir, float * image, int imgSize, PointCloudData pcd){
+    //printf("cuda_ray_trace\n");
 
     int index = getGlobalIdx_1D_2D();
     
@@ -612,29 +657,71 @@ __global__ void cuda_ray_trace(float* rayPos, float * rayDir, float * image, int
 
         auto it = intersect(pos, dir, pcd);
 
+        //cIntersection it = {true,cVec3(0,0,0),10.0};
+
         if(it.intersected){
-            // image[index*3+0] = 1.0;
-            // image[index*3+1] = 1.0;
-            // image[index*3+2] = 1.0;
+            image[index*3+0] = 0.1;
+            image[index*3+1] = 0.9;
+            image[index*3+2] = 0.1;
 
-            auto c = normale(it.position, pcd);
+            // auto c = normale(it.position, pcd);
 
-            image[index*3+0] = c[0] > 1.0 ? 1.0 : c[0] < 0.0 ? 0.0 : c[0] ;
-            image[index*3+1] = c[1] > 1.0 ? 1.0 : c[1] < 0.0 ? 0.0 : c[1] ;
-            image[index*3+2] = c[2] > 1.0 ? 1.0 : c[2] < 0.0 ? 0.0 : c[2] ;
+            // image[index*3+0] = c[0] > 1.0 ? 1.0 : c[0] < 0.0 ? 0.0 : c[0] ;
+            // image[index*3+1] = c[1] > 1.0 ? 1.0 : c[1] < 0.0 ? 0.0 : c[1] ;
+            // image[index*3+2] = c[2] > 1.0 ? 1.0 : c[2] < 0.0 ? 0.0 : c[2] ;
         }else{
-            image[index*3+0] = 0.3;
-            image[index*3+1] = 0.3;
-            image[index*3+2] = 0.3;
+            image[index*3+0] = 0.9;
+            image[index*3+1] = 0.1;
+            image[index*3+2] = 0.1;
         }
 
-        
     }
 
 }
+
+
+    // struct PointCloudData{
+    //     kd_tree_node* kdTree;
+    //     cVec3 * positions;
+    //     cVec3 * normals;
+    // };
+
+
+extern "C" PointCloudData getGPUpcd(std::vector<Vec3> positions, std::vector<Vec3> normals){
+    PointCloudData res;
+    auto tmpPos = std::vector<cVec3>(positions.size());
+    auto tmpNorm = std::vector<cVec3>(normals.size());
+
+    for(int i = 0 ; i < positions.size() ; i ++){
+        tmpPos[i] = {positions[i][0],positions[i][1],positions[i][2]};
+    }
+
+    for(int i = 0 ; i < normals.size() ; i ++){
+        tmpNorm[i] = {normals[i][0],normals[i][1],normals[i][2]};
+    }
+
+    
+    cudaMalloc(&(res.positions), tmpPos.size()*sizeof(cVec3));
+    cudaMalloc(&(res.normals), tmpNorm.size()*sizeof(cVec3));
+
+    cudaMemcpy(res.positions, (void *)tmpPos.data(), tmpPos.size()*sizeof(cVec3), cudaMemcpyHostToDevice);
+    cudaMemcpy(res.normals, (void *)tmpNorm.data(), tmpNorm.size()*sizeof(cVec3), cudaMemcpyHostToDevice);
+   
+
+    
+
+    std::cout<<"Start kd-tree building"<<std::endl;
+        auto my_kd_tree = make_kd_tree(positions);
+        res.kdTree = send_kd_tree(my_kd_tree);
+    std::cout<<"End kd-tree building"<<std::endl;
+
+    return res;
+}
+
+
 //calcul la couleur des pixels, par ray marching
 
-extern "C" void cuda_ray_trace_from_camera(int w, int h, Vec3 (*cameraSpaceToWorldSpace)(const Vec3&), Vec3 (*screen_space_to_worldSpace)(float, float), PointCloudData * pcd){
+extern "C" void cuda_ray_trace_from_camera(int w, int h, Vec3 (*cameraSpaceToWorldSpace)(const Vec3&), Vec3 (*screen_space_to_worldSpace)(float, float), PointCloudData pcd){
 
     std::vector<float> image(3*w*h, 0.5f);   
     std::vector<float> rayDir(3*w*h);
@@ -667,11 +754,6 @@ extern "C" void cuda_ray_trace_from_camera(int w, int h, Vec3 (*cameraSpaceToWor
     float * cudaPos;
     cudaMalloc(&cudaPos, 3*sizeof(float));
 
-    // struct PointCloudData{
-    //     kd_tree_node* kdTree;
-    //     cVec3 * positions;
-    //     cVec3 * normals;
-    // };
     cudaMemcpy(cudaDirTab, (void *)rayDir.data(), rayDir.size()*sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(cudaImage, (void *)image.data(), image.size()*sizeof(float), cudaMemcpyHostToDevice);
 

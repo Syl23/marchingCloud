@@ -26,7 +26,7 @@
 #include <float.h>
 #include "src/Vec3.h"
 #include "src/Camera.h"
-#include "src/jmkdtree.h"
+//#include "src/jmkdtree.h"
 
 #include "src/matrixUtilities.h"
 
@@ -42,16 +42,24 @@ extern "C" struct kd_tree_node{
     int left;
     int right;
 };
-extern "C" struct PointCloudData;
+
+extern "C" struct cVec3 {
+   float mVals[3];
+};
+
+extern "C" struct PointCloudData{
+    kd_tree_node* kdTree;
+    cVec3 * positions;
+    cVec3 * normals;
+};
+
+extern "C" PointCloudData getGPUpcd(std::vector<Vec3> positions, std::vector<Vec3> normals);
 
 extern "C" void testCuda();
 extern "C" std::vector<kd_tree_node> make_kd_tree(std::vector<Vec3> dots);
 extern "C" kd_tree_node* send_kd_tree(std::vector<kd_tree_node> kd_tree);
 
-extern "C" void cuda_ray_trace_from_camera(int w, int h, Vec3 (*cameraSpaceToWorldSpace)(const Vec3&), Vec3 (*screen_space_to_worldSpace)(float, float), PointCloudData * pcd);
-
-
-
+extern "C" void cuda_ray_trace_from_camera(int w, int h, Vec3 (*cameraSpaceToWorldSpace)(const Vec3&), Vec3 (*screen_space_to_worldSpace)(float, float), PointCloudData pcd);
 
 
 
@@ -71,8 +79,10 @@ std::vector< unsigned int > mesh_triangles;
 std::vector< Vec3 > gridou;
 std::vector< Vec3 > gridouNormals;
 
+PointCloudData pcd;
 
-BasicANNkdTree kdtree;
+
+//BasicANNkdTree kdtree;
 //kd_tree_node * cudaKd_tree = NULL;
 
 
@@ -320,7 +330,7 @@ void key (unsigned char keyPressed, int x, int y) {
 
     case 'r':
         camera.apply();
-        cuda_ray_trace_from_camera(glutGet(GLUT_WINDOW_WIDTH),glutGet(GLUT_WINDOW_HEIGHT),&cameraSpaceToWorldSpace, &screen_space_to_worldSpace, nullptr);
+        cuda_ray_trace_from_camera(glutGet(GLUT_WINDOW_WIDTH),glutGet(GLUT_WINDOW_HEIGHT),&cameraSpaceToWorldSpace, &screen_space_to_worldSpace, pcd);
 
         //ray_trace_from_camera();
         break;
@@ -385,70 +395,70 @@ Vec3 project(Vec3 point,Vec3 normalePlan,Vec3 pointPlan){
     return(point - Vec3::dot(point - pointPlan, normalePlan)*normalePlan);
 } 
 
-void HPSS(
-    Vec3 inputPoint,
-    Vec3 & outputPoint,
-    Vec3 & outputNormal,
-    std::vector<Vec3> const & positions,
-    std::vector<Vec3> const & normals,
-    BasicANNkdTree const & kdtree,
-    int kerneltype,
-    float h,
-    unsigned int nbIterations=10,
-    unsigned int knn= 20)
-{
-    ANNidxArray id_nearest_neighbors           = new ANNidx[knn];
-    ANNdistArray square_distances_to_neighbors = new ANNdist[knn];
+// void HPSS(
+//     Vec3 inputPoint,
+//     Vec3 & outputPoint,
+//     Vec3 & outputNormal,
+//     std::vector<Vec3> const & positions,
+//     std::vector<Vec3> const & normals,
+//     BasicANNkdTree const & kdtree,
+//     int kerneltype,
+//     float h,
+//     unsigned int nbIterations=10,
+//     unsigned int knn= 20)
+// {
+//     ANNidxArray id_nearest_neighbors           = new ANNidx[knn];
+//     ANNdistArray square_distances_to_neighbors = new ANNdist[knn];
 
-    Vec3 precPoint = inputPoint;
+//     Vec3 precPoint = inputPoint;
 
-    Vec3 nextPoint;
-    Vec3 nextNormal;
+//     Vec3 nextPoint;
+//     Vec3 nextNormal;
 
-    for(int itt = 0 ; itt < nbIterations ; itt++){
+//     for(int itt = 0 ; itt < nbIterations ; itt++){
 
-        kdtree.knearest(precPoint, knn,id_nearest_neighbors,square_distances_to_neighbors);
+//         kdtree.knearest(precPoint, knn,id_nearest_neighbors,square_distances_to_neighbors);
 
-        //getKnn(cudaKd_tree, knn, precPoint[0],precPoint[1],precPoint[2], id_nearest_neighbors, (float *)square_distances_to_neighbors);
+//         //getKnn(cudaKd_tree, knn, precPoint[0],precPoint[1],precPoint[2], id_nearest_neighbors, (float *)square_distances_to_neighbors);
 
 
-        nextPoint  = Vec3(0,0,0);
-        nextNormal = Vec3(0,0,0);
+//         nextPoint  = Vec3(0,0,0);
+//         nextNormal = Vec3(0,0,0);
 
-        float totWeight = 0.0;
+//         float totWeight = 0.0;
 
-        for(int i = 0 ; i<knn ; i ++){
+//         for(int i = 0 ; i<knn ; i ++){
 
-            auto proj = project(precPoint,normals[id_nearest_neighbors[i]],positions[id_nearest_neighbors[i]]);
-            float weight = 0.0;
-            float r = sqrt(square_distances_to_neighbors[i])/h;
-            switch (kerneltype){
-            case 0:
+//             auto proj = project(precPoint,normals[id_nearest_neighbors[i]],positions[id_nearest_neighbors[i]]);
+//             float weight = 0.0;
+//             float r = sqrt(square_distances_to_neighbors[i])/h;
+//             switch (kerneltype){
+//             case 0:
                 
-                weight = exp((-(r*r))/(h*h));
-                break;
-            case 1:
-                weight = 0;
-                break;
-            case 2:
-                weight = 0;
-                break;
-            }
-            totWeight  += weight;
-            nextPoint  += weight*proj;
-            nextNormal += weight*normals[id_nearest_neighbors[i]];
-        }
-        nextPoint = nextPoint / totWeight;
-        nextNormal.normalize();
-        precPoint = nextPoint;
-    }
+//                 weight = exp((-(r*r))/(h*h));
+//                 break;
+//             case 1:
+//                 weight = 0;
+//                 break;
+//             case 2:
+//                 weight = 0;
+//                 break;
+//             }
+//             totWeight  += weight;
+//             nextPoint  += weight*proj;
+//             nextNormal += weight*normals[id_nearest_neighbors[i]];
+//         }
+//         nextPoint = nextPoint / totWeight;
+//         nextNormal.normalize();
+//         precPoint = nextPoint;
+//     }
 
-    outputPoint = nextPoint;
-    outputNormal = nextNormal;
+//     outputPoint = nextPoint;
+//     outputNormal = nextNormal;
     
 
 
-} 
+// } 
 
 float randFloat(){
     return(((float)random())/((float)RAND_MAX));
@@ -467,65 +477,67 @@ double mapVal(double x, double minA, double maxA, double minB, double maxB){
     return(((x-minA)/(maxA-minA)) * (maxB-minB) + minB);
 }
 
-double signedDist(
-    Vec3 inputPoint,
-    std::vector<Vec3> const & positions,
-    std::vector<Vec3> const & normals,
-    BasicANNkdTree const & kdtree,
-    int kerneltype,
-    float h = 100.0,
-    unsigned int nbIterations=10,
-    unsigned int knn= 20)
-{
-    Vec3 projPoint = Vec3(0,0,0);
-    Vec3 projNormal= Vec3(0,0,0);
+// double signedDist(
+//     Vec3 inputPoint,
+//     std::vector<Vec3> const & positions,
+//     std::vector<Vec3> const & normals,
+//     BasicANNkdTree const & kdtree,
+//     int kerneltype,
+//     float h = 100.0,
+//     unsigned int nbIterations=10,
+//     unsigned int knn= 20)
+// {
+//     Vec3 projPoint = Vec3(0,0,0);
+//     Vec3 projNormal= Vec3(0,0,0);
     
     
-    HPSS(inputPoint,projPoint,projNormal,positions,normals,kdtree,kerneltype,h,nbIterations,knn);
+//     HPSS(inputPoint,projPoint,projNormal,positions,normals,kdtree,kerneltype,h,nbIterations,knn);
 
 
     
 
-    // std::cout<<"inputPoint : "<<inputPoint<<std::endl;
-    // std::cout<<"projPoint : "<<projPoint<<std::endl;
-    // std::cout<<"projNormal : "<<projNormal<<std::endl;
+//     // std::cout<<"inputPoint : "<<inputPoint<<std::endl;
+//     // std::cout<<"projPoint : "<<projPoint<<std::endl;
+//     // std::cout<<"projNormal : "<<projNormal<<std::endl;
 
-    return(Vec3::dot(inputPoint-projPoint,projNormal));
-}
+//     return(Vec3::dot(inputPoint-projPoint,projNormal));
+// }
 
-double globalSignedDist(Vec3 pos){
-    return signedDist(pos,positions,normals,kdtree,0,100.0,5,10);
-}
+// double globalSignedDist(Vec3 pos){
+//     return signedDist(pos,positions,normals,kdtree,0,100.0,5,10);
+// }
 
-void flipNormales(
-    std::vector< Vec3 > & mesh_positions ,
-    std::vector< unsigned int > & triangles,
-    std::vector<Vec3> const &  positions,
-    std::vector<Vec3> const & normals,
-    BasicANNkdTree const & kdtree,
-    int res = 32,
-    int kerneltype = 0,    
-    float h = 100.0){
+// void flipNormales(
 
-    for(int i = 0 ; i < triangles.size()/3 ; i ++){
-        Vec3 p0 = mesh_positions[triangles[3*i]];
-        Vec3 p1 = mesh_positions[triangles[3*i+1]];
-        Vec3 p2 = mesh_positions[triangles[3*i+2]];
-        Vec3 n = Vec3::cross(p1-p0 , p2-p0);
-        n.normalize();
+//     std::vector< Vec3 > & mesh_positions ,
+//     std::vector< unsigned int > & triangles,
+//     std::vector<Vec3> const &  positions,
+//     std::vector<Vec3> const & normals,
+//     BasicANNkdTree const & kdtree,
+//     int res = 32,
+//     int kerneltype = 0,    
+//     float h = 100.0){
 
-        Vec3 pm = (p0+p1+p2)/3.0 + (p1-p0).length()*0.5*n;
+//     for(int i = 0 ; i < triangles.size()/3 ; i ++){
+//         Vec3 p0 = mesh_positions[triangles[3*i]];
+//         Vec3 p1 = mesh_positions[triangles[3*i+1]];
+//         Vec3 p2 = mesh_positions[triangles[3*i+2]];
+//         Vec3 n = Vec3::cross(p1-p0 , p2-p0);
+//         n.normalize();
 
-        auto tmpSgn = signedDist(pm, positions,normals,kdtree, kerneltype)>0.0;
+//         Vec3 pm = (p0+p1+p2)/3.0 + (p1-p0).length()*0.5*n;
 
-        if(!tmpSgn){
-            auto tmp = triangles[3*i +0];
+//         auto tmpSgn = signedDist(pm, positions,normals,kdtree, kerneltype)>0.0;
 
-            triangles[3*i +0] = triangles[3*i +1];
-            triangles[3*i +1] = tmp;
-        }
-    }
-    }
+//         if(!tmpSgn){
+//             auto tmp = triangles[3*i +0];
+
+//             triangles[3*i +0] = triangles[3*i +1];
+//             triangles[3*i +1] = tmp;
+//         }
+//     }
+//     }
+
 void exportOFF(std::vector< Vec3 > & mesh_positions ,std::vector< unsigned int > & triangles){
     std::ofstream myfile;
     myfile.open ("object.off");
@@ -543,39 +555,39 @@ void exportOFF(std::vector< Vec3 > & mesh_positions ,std::vector< unsigned int >
 }
 
 
-void setNormales(
-    std::vector< Vec3 > & mesh_positions ,
-    std::vector< unsigned int > & triangles,
-    std::vector< Vec3> & meshNormals,
-    std::vector<Vec3> const &  positions,
-    std::vector<Vec3> const & normals,
-    BasicANNkdTree const & kdtree,
-    int res = 32,
-    int kerneltype = 0,    
-    float h = 100.0){
+// void setNormales(
+//     std::vector< Vec3 > & mesh_positions ,
+//     std::vector< unsigned int > & triangles,
+//     std::vector< Vec3> & meshNormals,
+//     std::vector<Vec3> const &  positions,
+//     std::vector<Vec3> const & normals,
+//     BasicANNkdTree const & kdtree,
+//     int res = 32,
+//     int kerneltype = 0,    
+//     float h = 100.0){
 
-    for(int i = 0 ; i < triangles.size()/3 ; i ++){
-        Vec3 p0 = mesh_positions[triangles[3*i]];
-        Vec3 p1 = mesh_positions[triangles[3*i+1]];
-        Vec3 p2 = mesh_positions[triangles[3*i+2]];
+//     for(int i = 0 ; i < triangles.size()/3 ; i ++){
+//         Vec3 p0 = mesh_positions[triangles[3*i]];
+//         Vec3 p1 = mesh_positions[triangles[3*i+1]];
+//         Vec3 p2 = mesh_positions[triangles[3*i+2]];
 
-        Vec3 n = Vec3::cross(p1-p0 , p2-p0);
-        n.normalize();
+//         Vec3 n = Vec3::cross(p1-p0 , p2-p0);
+//         n.normalize();
 
-        Vec3 projNorm = meshNormals[triangles[3*i]] + mesh_positions[triangles[3*i+1]] + mesh_positions[triangles[3*i+2]];
-        projNorm.normalize();
+//         Vec3 projNorm = meshNormals[triangles[3*i]] + mesh_positions[triangles[3*i+1]] + mesh_positions[triangles[3*i+2]];
+//         projNorm.normalize();
 
-        bool flip = Vec3::dot(n,projNorm) < 0.0 ;
+//         bool flip = Vec3::dot(n,projNorm) < 0.0 ;
 
-        if(flip){
-            auto tmp = triangles[3*i +0];
+//         if(flip){
+//             auto tmp = triangles[3*i +0];
 
-            triangles[3*i +0] = triangles[3*i +1];
-            triangles[3*i +1] = tmp;
-        }
-    }
+//             triangles[3*i +0] = triangles[3*i +1];
+//             triangles[3*i +1] = tmp;
+//         }
+//     }
 
-}
+// }
 
 void subdivide(std::vector< Vec3 > & positions ,std::vector< unsigned int > & triangles){
     auto tmpTri = std::vector<unsigned int>();
@@ -621,121 +633,121 @@ void subdivide(std::vector< Vec3 > & positions ,std::vector< unsigned int > & tr
 
 }
 
-void dualContouring(
-    std::vector< Vec3 > & mesh_positions ,
-    std::vector< unsigned int > & triangles,
-    std::vector<Vec3> const &  positions,
-    std::vector<Vec3> const & normals,
-    BasicANNkdTree const & kdtree,
-    int res = 32,
-    int kerneltype = 0,    
-    float h = 100.0){
+// void dualContouring(
+//     std::vector< Vec3 > & mesh_positions ,
+//     std::vector< unsigned int > & triangles,
+//     std::vector<Vec3> const &  positions,
+//     std::vector<Vec3> const & normals,
+//     BasicANNkdTree const & kdtree,
+//     int res = 32,
+//     int kerneltype = 0,    
+//     float h = 100.0){
 
 
-    auto hmap = std::vector<std::vector<std::vector<int>>>(res,std::vector<std::vector<int>>(res,std::vector<int>(res,-1)));
+//     auto hmap = std::vector<std::vector<std::vector<int>>>(res,std::vector<std::vector<int>>(res,std::vector<int>(res,-1)));
 
     
-    Vec3 maxVec = positions[0];
-    Vec3 minVec = positions[0];
+//     Vec3 maxVec = positions[0];
+//     Vec3 minVec = positions[0];
 
-    for(auto v : positions){
-        for(int i = 0 ; i<3 ; i ++){
-            maxVec[i] = std::max(maxVec[i],v[i]);
-            minVec[i] = std::min(minVec[i],v[i]);
-        }
-    }
+//     for(auto v : positions){
+//         for(int i = 0 ; i<3 ; i ++){
+//             maxVec[i] = std::max(maxVec[i],v[i]);
+//             minVec[i] = std::min(minVec[i],v[i]);
+//         }
+//     }
 
-    Vec3 cellSize = (maxVec-minVec) / res;
+//     Vec3 cellSize = (maxVec-minVec) / res;
 
 
-    int vertInd = 0;
-    for(int ix = 0 ; ix < res ; ix ++){
-        for(int iy = 0 ; iy < res ; iy ++){
-            for(int iz = 0 ; iz < res ; iz ++){
+//     int vertInd = 0;
+//     for(int ix = 0 ; ix < res ; ix ++){
+//         for(int iy = 0 ; iy < res ; iy ++){
+//             for(int iz = 0 ; iz < res ; iz ++){
 
-                double x = mapVal(ix,0,res,minVec[0],maxVec[0]);
-                double y = mapVal(iy,0,res,minVec[1],maxVec[1]);
-                double z = mapVal(iz,0,res,minVec[2],maxVec[2]);
+//                 double x = mapVal(ix,0,res,minVec[0],maxVec[0]);
+//                 double y = mapVal(iy,0,res,minVec[1],maxVec[1]);
+//                 double z = mapVal(iz,0,res,minVec[2],maxVec[2]);
 
-                Vec3 point = Vec3(x, y, z);
+//                 Vec3 point = Vec3(x, y, z);
 
-                std::vector<Vec3> cubePoints = std::vector<Vec3>();
+//                 std::vector<Vec3> cubePoints = std::vector<Vec3>();
 
-                for(int dx = 0 ; dx <= 1 ; dx ++)for(int dy = 0 ; dy <= 1 ; dy ++)for(int dz = 0 ; dz <= 1 ; dz ++){
-                    cubePoints.push_back(point + cellSize*Vec3(dx,dy,dz));
-                }
+//                 for(int dx = 0 ; dx <= 1 ; dx ++)for(int dy = 0 ; dy <= 1 ; dy ++)for(int dz = 0 ; dz <= 1 ; dz ++){
+//                     cubePoints.push_back(point + cellSize*Vec3(dx,dy,dz));
+//                 }
 
-                bool cachange = false;
+//                 bool cachange = false;
                 
-                bool sgn = signedDist(cubePoints[0], positions,normals,kdtree, kerneltype)>0.0;
-                for(int i = 1 ; i < cubePoints.size() ; i ++){
-                    auto dist = signedDist(cubePoints[i], positions,normals,kdtree, kerneltype);
-                    bool tmpSgn = dist>0.0;
+//                 bool sgn = signedDist(cubePoints[0], positions,normals,kdtree, kerneltype)>0.0;
+//                 for(int i = 1 ; i < cubePoints.size() ; i ++){
+//                     auto dist = signedDist(cubePoints[i], positions,normals,kdtree, kerneltype);
+//                     bool tmpSgn = dist>0.0;
 
-                    if(sgn != tmpSgn){
-                        cachange = true;
-                    }else{
-                    }
-                } 
+//                     if(sgn != tmpSgn){
+//                         cachange = true;
+//                     }else{
+//                     }
+//                 } 
 
-                if(cachange){
-                    hmap[ix][iy][iz] = vertInd;
-                    vertInd++;
+//                 if(cachange){
+//                     hmap[ix][iy][iz] = vertInd;
+//                     vertInd++;
 
-                    mesh_positions.push_back(point+0.5*cellSize);
+//                     mesh_positions.push_back(point+0.5*cellSize);
 
-                    gridou.push_back(point+0.5*cellSize);
-                    gridouNormals.push_back(Vec3(1,1,1));
-                }
-            }
-        }
-    }
+//                     gridou.push_back(point+0.5*cellSize);
+//                     gridouNormals.push_back(Vec3(1,1,1));
+//                 }
+//             }
+//         }
+//     }
 
-    for(int ix = 0 ; ix < res ; ix ++){
-        for(int iy = 0 ; iy < res ; iy ++){
-            for(int iz = 0 ; iz < res ; iz ++){
-                if(ix + 1 < res && iy + 1 < res && iz < res &&
-                hmap[ix][iy][iz]!=-1 && hmap[ix+1][iy][iz]!=-1 && hmap[ix+1][iy+1][iz]!=-1 && hmap[ix][iy+1][iz] != -1){
+//     for(int ix = 0 ; ix < res ; ix ++){
+//         for(int iy = 0 ; iy < res ; iy ++){
+//             for(int iz = 0 ; iz < res ; iz ++){
+//                 if(ix + 1 < res && iy + 1 < res && iz < res &&
+//                 hmap[ix][iy][iz]!=-1 && hmap[ix+1][iy][iz]!=-1 && hmap[ix+1][iy+1][iz]!=-1 && hmap[ix][iy+1][iz] != -1){
 
-                    triangles.push_back(hmap[ix][iy][iz]);
-                    triangles.push_back(hmap[ix+1][iy][iz]);
-                    triangles.push_back(hmap[ix+1][iy+1][iz]);
+//                     triangles.push_back(hmap[ix][iy][iz]);
+//                     triangles.push_back(hmap[ix+1][iy][iz]);
+//                     triangles.push_back(hmap[ix+1][iy+1][iz]);
 
-                    triangles.push_back(hmap[ix][iy][iz]);
-                    triangles.push_back(hmap[ix+1][iy+1][iz]);
-                    triangles.push_back(hmap[ix][iy+1][iz]);
-                }
+//                     triangles.push_back(hmap[ix][iy][iz]);
+//                     triangles.push_back(hmap[ix+1][iy+1][iz]);
+//                     triangles.push_back(hmap[ix][iy+1][iz]);
+//                 }
 
-                if(ix + 1 < res && iy < res && iz+1 < res &&
-                hmap[ix][iy][iz]!=-1 && hmap[ix+1][iy][iz]!=-1 && hmap[ix+1][iy][iz+1]!=-1 && hmap[ix][iy][iz+1] != -1){
+//                 if(ix + 1 < res && iy < res && iz+1 < res &&
+//                 hmap[ix][iy][iz]!=-1 && hmap[ix+1][iy][iz]!=-1 && hmap[ix+1][iy][iz+1]!=-1 && hmap[ix][iy][iz+1] != -1){
 
-                    triangles.push_back(hmap[ix][iy][iz]);
-                    triangles.push_back(hmap[ix+1][iy][iz]);
-                    triangles.push_back(hmap[ix+1][iy][iz+1]);
+//                     triangles.push_back(hmap[ix][iy][iz]);
+//                     triangles.push_back(hmap[ix+1][iy][iz]);
+//                     triangles.push_back(hmap[ix+1][iy][iz+1]);
 
-                    triangles.push_back(hmap[ix][iy][iz]);
-                    triangles.push_back(hmap[ix+1][iy][iz+1]);
-                    triangles.push_back(hmap[ix][iy][iz+1]);
-                }
+//                     triangles.push_back(hmap[ix][iy][iz]);
+//                     triangles.push_back(hmap[ix+1][iy][iz+1]);
+//                     triangles.push_back(hmap[ix][iy][iz+1]);
+//                 }
 
-                if(ix < res && iy +1 < res && iz+1 < res &&
-                hmap[ix][iy][iz]!=-1 && hmap[ix][iy+1][iz]!=-1 && hmap[ix][iy+1][iz+1]!=-1 && hmap[ix][iy][iz+1] != -1){
+//                 if(ix < res && iy +1 < res && iz+1 < res &&
+//                 hmap[ix][iy][iz]!=-1 && hmap[ix][iy+1][iz]!=-1 && hmap[ix][iy+1][iz+1]!=-1 && hmap[ix][iy][iz+1] != -1){
 
-                    triangles.push_back(hmap[ix][iy][iz]);
-                    triangles.push_back(hmap[ix][iy+1][iz]);
-                    triangles.push_back(hmap[ix][iy+1][iz+1]);
+//                     triangles.push_back(hmap[ix][iy][iz]);
+//                     triangles.push_back(hmap[ix][iy+1][iz]);
+//                     triangles.push_back(hmap[ix][iy+1][iz+1]);
 
-                    triangles.push_back(hmap[ix][iy][iz]);
-                    triangles.push_back(hmap[ix][iy+1][iz+1]);
-                    triangles.push_back(hmap[ix][iy][iz+1]);
-                }
-            }
-        }
-    }
-}
+//                     triangles.push_back(hmap[ix][iy][iz]);
+//                     triangles.push_back(hmap[ix][iy+1][iz+1]);
+//                     triangles.push_back(hmap[ix][iy][iz+1]);
+//                 }
+//             }
+//         }
+//     }
+// }
 
 
-#include "src/rayTracing.h"
+//#include "src/rayTracing.h"
 
 
 int main (int argc, char ** argv) {
@@ -782,12 +794,16 @@ int main (int argc, char ** argv) {
 
 
         //loadPN("pointsets/dino_subsampled_extreme.pn" , positions2 , normals2);
-        kdtree.build(positions);
+//        kdtree.build(positions);
 
-        std::cout<<"Start kd-tree building"<<std::endl;
-        auto my_kd_tree = make_kd_tree(positions);
-        auto cudaKd_tree = send_kd_tree(my_kd_tree);
-        std::cout<<"End kd-tree building"<<std::endl;
+        pcd = getGPUpcd(positions,normals);
+
+        // std::cout<<"Start kd-tree building"<<std::endl;
+        // auto my_kd_tree = make_kd_tree(positions);
+        // auto cudaKd_tree = send_kd_tree(my_kd_tree);
+        // std::cout<<"End kd-tree building"<<std::endl;
+
+
 
 
         /* test
