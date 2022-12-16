@@ -9,11 +9,13 @@
 #include <random>
 #include <memory>
 #include <functional>
+#include <cuda_runtime.h>
 
 #include "../src/Vec3.h"
 
 extern "C" struct cVec3 {
    float mVals[3];
+   
 
    __device__ cVec3( float x , float y , float z ) {
       mVals[0] = x; mVals[1] = y; mVals[2] = z;
@@ -42,6 +44,21 @@ extern "C" struct cVec3 {
    }
 
    void __device__ normalize() { float L = length(); mVals[0] /= L; mVals[1] /= L; mVals[2] /= L; }
+
+   friend std::ostream & operator<<(std::ostream &out, const cVec3 &vec)
+{
+out << "(";
+for (int i = 0; i < 3; i++) {
+out << vec.mVals[i];
+if (i < 2) {
+out << ", ";
+}
+}
+out << ")";
+return out;
+}
+
+   
 
 };
 
@@ -276,13 +293,6 @@ extern "C" kd_tree_node* send_kd_tree(std::vector<kd_tree_node> kd_tree){
     return res;
 }
 
-struct pointQueue{
-    int size;
-    int nbInQueue;
-
-    int * ind;
-    float * dist;
-
     // __device__ pointQueue(int nb){
     //     size = nb;
     //     nbInQueue = 0;
@@ -308,11 +318,16 @@ struct pointQueue{
     //         ind[i] = 0;
     //     }
     // }
+
+struct pointQueue{
+    int size;
+    int nbInQueue;
+
+    int * ind;
+    float * dist;
 };
 
 __device__ void initPointQueue(pointQueue * ptc, int nb){
-    *ptc = {0,0,NULL,NULL};
-
     ptc->size = nb;
     ptc->nbInQueue = 0;
 
@@ -325,6 +340,13 @@ __device__ void initPointQueue(pointQueue * ptc, int nb){
     }
 }
 
+__device__ void freePointQueue(pointQueue * ptc){
+    free(ptc->ind);
+    free(ptc->dist);
+}
+
+
+
 
 float __device__ getThresholdDist(pointQueue* queue){
     if(queue->nbInQueue == queue->size){
@@ -333,29 +355,41 @@ float __device__ getThresholdDist(pointQueue* queue){
     return -1;
 }
 
-void __device__ addToPointQueue(pointQueue* queue, int index, float dist){
-    int bagi   = index;
-    float bagd = dist;
 
-    for(int i = 0 ; i < queue->nbInQueue ; i ++){
-        if(queue->dist[i] < 0 || bagd < queue->dist[i]){
+// c'est bien moi qui ai écrit cette fonction, elle a seulement été commentée par chatGPT
 
-            int tmpi = queue->ind[i];
-            float tmpd = queue->dist[i];
+// Ajoute un élément (un indice et une distance) à une file d'attente structurée en utilisant un algorithme de tri par insertion.
+//
+// queue: pointeur vers la file d'attente à laquelle ajouter l'élément
+// index: indice de l'élément à ajouter à la file d'attente
+// distance: distance de l'élément à ajouter à la file d'attente
+void __device__ addToPointQueue(pointQueue* queue, int index, float distance) {
+    // variables temporaires pour stocker l'indice et la distance passés en paramètre
+    int currentIndex = index;
+    float currentDistance = distance;
 
-            queue->ind[i] = bagi;
-            queue->dist[i] = bagd;
+    // itère à travers tous les éléments de la file d'attente
+    for (int i = 0; i < queue->nbInQueue; i++) {
+        // si la distance de l'élément de la file d'attente est négative ou si la distance passée en paramètre est inférieure à celle de l'élément de la file d'attente
+        if (queue->dist[i] < 0 || currentDistance < queue->dist[i]) {
+            // échange l'élément de la file d'attente avec l'indice et la distance temporaires
+            int tempIndex = queue->ind[i];
+            float tempDistance = queue->dist[i];
 
-            bagi = tmpi;
-            bagd = tmpd;
+            queue->ind[i] = currentIndex;
+            queue->dist[i] = currentDistance;
+
+            currentIndex = tempIndex;
+            currentDistance = tempDistance;
         }
     }
 
-    if(queue->nbInQueue < queue->size){
-        queue->ind [queue->nbInQueue] = bagi;
-        queue->dist[queue->nbInQueue] = bagd;
+    // si la file d'attente n'est pas pleine, ajoute l'indice et la distance temporaires à la fin de la file d'attente et incrémente nbInQueue
+    if (queue->nbInQueue < queue->size) {
+        queue->ind[queue->nbInQueue] = currentIndex;
+        queue->dist[queue->nbInQueue] = currentDistance;
 
-        queue->nbInQueue ++;
+        queue->nbInQueue++;
     }
 }
 
@@ -363,59 +397,107 @@ float __device__ sq(float f){
     return f*f;
 }
 
+const int MAX_STACK_SIZE = 1000;
+
 void __device__ fillQueue(kd_tree_node * kd_tree, pointQueue* queue, int currentInd, int currentAxis, float pointX, float pointY, float pointZ){
-    //trouver le meilleur coté
-    //appelle récursif sur le meilleur coté
+  int stack[MAX_STACK_SIZE];
+  int stackPointer = 0;
+  stack[stackPointer++] = 0;
+  stack[stackPointer++] = 0;
 
-    //si la pire des meilleur distance est superieur a la distance avec le plan de séparatrion on fais un appelle récursif de l'autre coté
+  while (stackPointer > 0) {
+    int currentAxis = stack[--stackPointer];
+    int currentInd = stack[--stackPointer];
 
-
-
-    float curentSqDist = //distance carrée du noeud courrant
-        sq(kd_tree[currentInd].x - pointX) +
-        sq(kd_tree[currentInd].y - pointY) +
-        sq(kd_tree[currentInd].z - pointZ);
-
+    float currentSqDist = sq(kd_tree[currentInd].x - pointX) + sq(kd_tree[currentInd].y - pointY) + sq(kd_tree[currentInd].z - pointZ);
     auto threshold = getThresholdDist(queue);
 
-
     int pointIndex = kd_tree[currentInd].ind;
-
-    if(threshold < 0 || curentSqDist < threshold)
-    addToPointQueue(queue, pointIndex, curentSqDist);
-
-
-    int bestSide = 0;
-    int otherSide = 0; 
-
-    if(
-        kd_tree[currentInd].left == -1 ||
-        (currentAxis == 0 && kd_tree[currentInd].x < pointX)||
-        (currentAxis == 1 && kd_tree[currentInd].y < pointY)||
-        (currentAxis == 2 && kd_tree[currentInd].z < pointZ)
-    ){
-        bestSide = kd_tree[currentInd].left;
-        otherSide = kd_tree[currentInd].right;            
-    }else{
-        bestSide = kd_tree[currentInd].right;
-        otherSide = kd_tree[currentInd].left;
+    if (threshold < 0 || currentSqDist < threshold) {
+      addToPointQueue(queue, pointIndex, currentSqDist);
     }
 
+    int bestSide = 0;
+    int otherSide = 0;
 
-    if(bestSide != -1){
-        fillQueue(kd_tree, queue, bestSide, (currentAxis+1 )% 3, pointX, pointY, pointZ);
+    if (kd_tree[currentInd].left == -1 || (currentAxis == 0 && kd_tree[currentInd].x < pointX) ||
+        (currentAxis == 1 && kd_tree[currentInd].y < pointY) || (currentAxis == 2 && kd_tree[currentInd].z < pointZ)) {
+      bestSide = kd_tree[currentInd].left;
+      otherSide = kd_tree[currentInd].right;
+    } else {
+      bestSide = kd_tree[currentInd].right;
+      otherSide = kd_tree[currentInd].left;
+    }
+
+    if (bestSide != -1) {
+      stack[stackPointer++] = bestSide;
+      stack[stackPointer++] = (currentAxis + 1) % 3;
     }
 
     threshold = getThresholdDist(queue);
 
-    if(otherSide != -1 && (
-        (currentAxis == 0 && (threshold < 0 || sq(pointX-kd_tree[otherSide].x) < threshold) )||
-        (currentAxis == 1 && (threshold < 0 || sq(pointY-kd_tree[otherSide].y) < threshold) )||
-        (currentAxis == 2 && (threshold < 0 || sq(pointZ-kd_tree[otherSide].z) < threshold) ))
-        ){
-            fillQueue(kd_tree,queue, otherSide, (currentAxis+1 )% 3, pointX, pointY, pointZ);           
-        }
+    if (otherSide != -1 &&
+        ((currentAxis == 0 && (threshold < 0 || sq(pointX - kd_tree[otherSide].x) < threshold)) ||
+         (currentAxis == 1 && (threshold < 0 || sq(pointY - kd_tree[otherSide].y) < threshold)) ||
+         (currentAxis == 2 && (threshold < 0 || sq(pointZ - kd_tree[otherSide].z) < threshold)))) {
+      stack[stackPointer++] = otherSide;
+      stack[stackPointer++] = (currentAxis + 1) % 3;
+    }
+  }
 }
+
+// void __device__ fillQueue(kd_tree_node * kd_tree, pointQueue* queue, int currentInd, int currentAxis, float pointX, float pointY, float pointZ){
+//     //trouver le meilleur coté
+//     //appelle récursif sur le meilleur coté
+
+//     //si la pire des meilleur distance est superieur a la distance avec le plan de séparatrion on fais un appelle récursif de l'autre coté
+
+
+//     float curentSqDist = //distance carrée du noeud courrant
+//         sq(kd_tree[currentInd].x - pointX) +
+//         sq(kd_tree[currentInd].y - pointY) +
+//         sq(kd_tree[currentInd].z - pointZ);
+
+//     auto threshold = getThresholdDist(queue);
+
+
+//     int pointIndex = kd_tree[currentInd].ind;
+
+//     if(threshold < 0 || curentSqDist < threshold)
+//     addToPointQueue(queue, pointIndex, curentSqDist);
+
+
+//     int bestSide = 0;
+//     int otherSide = 0; 
+
+//     if(
+//         kd_tree[currentInd].left == -1 ||
+//         (currentAxis == 0 && kd_tree[currentInd].x < pointX)||
+//         (currentAxis == 1 && kd_tree[currentInd].y < pointY)||
+//         (currentAxis == 2 && kd_tree[currentInd].z < pointZ)
+//     ){
+//         bestSide = kd_tree[currentInd].left;
+//         otherSide = kd_tree[currentInd].right;            
+//     }else{
+//         bestSide = kd_tree[currentInd].right;
+//         otherSide = kd_tree[currentInd].left;
+//     }
+
+
+//     if(bestSide != -1){
+//         fillQueue(kd_tree, queue, bestSide, (currentAxis+1 )% 3, pointX, pointY, pointZ);
+//     }
+
+//     threshold = getThresholdDist(queue);
+
+//     if(otherSide != -1 && (
+//         (currentAxis == 0 && (threshold < 0 || sq(pointX-kd_tree[otherSide].x) < threshold) )||
+//         (currentAxis == 1 && (threshold < 0 || sq(pointY-kd_tree[otherSide].y) < threshold) )||
+//         (currentAxis == 2 && (threshold < 0 || sq(pointZ-kd_tree[otherSide].z) < threshold) ))
+//         ){
+//             fillQueue(kd_tree,queue, otherSide, (currentAxis+1 )% 3, pointX, pointY, pointZ);           
+//         }
+// }
 
 pointQueue* __device__ knearest(
     kd_tree_node * kd_tree,
@@ -426,7 +508,7 @@ pointQueue* __device__ knearest(
     //pointQueue* queue = new pointQueue(nbNeighbors); //les points les plus proches
     //pointQueue* queue = new pointQueue(); //les points les plus proches
 
-    pointQueue* queue;// = new pointQueue();
+    pointQueue* queue = (pointQueue*) malloc(sizeof(pointQueue));
     initPointQueue(queue, nbNeighbors);
 
 
@@ -439,15 +521,18 @@ pointQueue* __device__ knearest(
 }
 
 __device__ void computeKnn(int * indTab, float * sqDistTab, kd_tree_node * kd_tree, int nb, float x, float y, float z){
-    //auto resQueue = knearest(kd_tree,x,y,z,nb);
+    auto resQueue = knearest(kd_tree,x,y,z,nb);
 
-    pointQueue* resQueue;// = new pointQueue();
-    initPointQueue(resQueue, nb);
+    // pointQueue* resQueue = (pointQueue*) malloc(sizeof(pointQueue));
+    // initPointQueue(resQueue, nb);
     
     for(int i = 0 ; i < nb ; i ++){
         indTab[i] = resQueue->ind[i];
         sqDistTab[i] = resQueue->dist[i];
     }
+
+    freePointQueue(resQueue);
+    free(resQueue);
 }
 
 //for debug purpuse do not delete
@@ -520,11 +605,11 @@ __device__ float HPSSDist(
 {
     int kerneltype = 0;
     float h = 100;
-    unsigned int nbIterations = 5;
+    unsigned int nbIterations = 4;
     const unsigned int knn= 10;
 
-    int id_nearest_neighbors[knn];//           = int[knn];//new int[knn];
-    float square_distances_to_neighbors[knn];// = float[knn];//new float[knn];
+    int * id_nearest_neighbors = (int *) malloc(knn * sizeof(int));
+    float * square_distances_to_neighbors = (float *) malloc(knn * sizeof(float));
 
     cVec3 precPoint = inputPoint;
 
@@ -537,6 +622,7 @@ __device__ float HPSSDist(
         //kdtree.knearest(precPoint, knn,id_nearest_neighbors,square_distances_to_neighbors);
 
         //computeKnn(pcd->kdTree, knn, precPoint[0],precPoint[1],precPoint[2], id_nearest_neighbors, (float *)square_distances_to_neighbors);
+
         computeKnn(id_nearest_neighbors, (float *)square_distances_to_neighbors, pcd.kdTree, knn, precPoint[0],precPoint[1],precPoint[2]);
 
 
@@ -571,8 +657,8 @@ __device__ float HPSSDist(
         precPoint = nextPoint;
     }
     
-    // free(id_nearest_neighbors);
-    // free(square_distances_to_neighbors);
+    free(id_nearest_neighbors);
+    free(square_distances_to_neighbors);
 
     
     //signedDist(pos,positions,normals,kdtree,0,100.0,5,10);
@@ -588,20 +674,29 @@ __device__ float HPSSDist(
 
 __device__ float globalDist(cVec3 pos, PointCloudData pcd){
     //printf("globalDist\n");
-    //return HPSSDist(pos, pcd);
+    return HPSSDist(pos, pcd);
 
-    float sphere = pos.length() - 1.0;
+    // pointQueue* resQueue = new pointQueue();
+    // initPointQueue(resQueue, 10);
 
-    float cube = max(abs(pos[0])-1,max(abs(pos[1])-1,abs(pos[0])-1));
-    return sphere;
-    return min(sphere,cube); 
+
+    // freePointQueue(resQueue);
+    // delete resQueue;
+
+
+
+    // float sphere = pos.length() - 1.0;
+
+    // float cube = max(abs(pos[0])-1,max(abs(pos[1])-1,abs(pos[0])-1));
+    // return sphere;
+    // return min(sphere,cube); 
 }
 
 __device__ cIntersection intersect(cVec3 pos, cVec3 dir, PointCloudData pcd){
-    double seuilMin = 0.005;
+    double seuilMin = 0.01;
     double seuilMax = 10;
 
-    int maxItt = 10;
+    int maxItt = 50;
 
     bool conv = false;
     bool div  = false;
@@ -660,15 +755,15 @@ __global__ void cuda_ray_trace(float* rayPos, float * rayDir, float * image, int
         //cIntersection it = {true,cVec3(0,0,0),10.0};
 
         if(it.intersected){
-            image[index*3+0] = 0.1;
-            image[index*3+1] = 0.9;
-            image[index*3+2] = 0.1;
+            // image[index*3+0] = 0.1;
+            // image[index*3+1] = 0.9;
+            // image[index*3+2] = 0.1;
 
-            // auto c = normale(it.position, pcd);
+            auto c = normale(it.position, pcd);
 
-            // image[index*3+0] = c[0] > 1.0 ? 1.0 : c[0] < 0.0 ? 0.0 : c[0] ;
-            // image[index*3+1] = c[1] > 1.0 ? 1.0 : c[1] < 0.0 ? 0.0 : c[1] ;
-            // image[index*3+2] = c[2] > 1.0 ? 1.0 : c[2] < 0.0 ? 0.0 : c[2] ;
+            image[index*3+0] = c[0] > 1.0 ? 1.0 : c[0] < 0.0 ? 0.0 : c[0] ;
+            image[index*3+1] = c[1] > 1.0 ? 1.0 : c[1] < 0.0 ? 0.0 : c[1] ;
+            image[index*3+2] = c[2] > 1.0 ? 1.0 : c[2] < 0.0 ? 0.0 : c[2] ;
         }else{
             image[index*3+0] = 0.9;
             image[index*3+1] = 0.1;
@@ -689,25 +784,12 @@ __global__ void cuda_ray_trace(float* rayPos, float * rayDir, float * image, int
 
 extern "C" PointCloudData getGPUpcd(std::vector<Vec3> positions, std::vector<Vec3> normals){
     PointCloudData res;
-    auto tmpPos = std::vector<cVec3>(positions.size());
-    auto tmpNorm = std::vector<cVec3>(normals.size());
-
-    for(int i = 0 ; i < positions.size() ; i ++){
-        tmpPos[i] = {positions[i][0],positions[i][1],positions[i][2]};
-    }
-
-    for(int i = 0 ; i < normals.size() ; i ++){
-        tmpNorm[i] = {normals[i][0],normals[i][1],normals[i][2]};
-    }
-
     
-    cudaMalloc(&(res.positions), tmpPos.size()*sizeof(cVec3));
-    cudaMalloc(&(res.normals), tmpNorm.size()*sizeof(cVec3));
+    cudaMalloc(&(res.positions), positions.size()*sizeof(cVec3));
+    cudaMalloc(&(res.normals), normals.size()*sizeof(cVec3));
 
-    cudaMemcpy(res.positions, (void *)tmpPos.data(), tmpPos.size()*sizeof(cVec3), cudaMemcpyHostToDevice);
-    cudaMemcpy(res.normals, (void *)tmpNorm.data(), tmpNorm.size()*sizeof(cVec3), cudaMemcpyHostToDevice);
-   
-
+    cudaMemcpy(res.positions, (void *)positions.data(), positions.size()*sizeof(cVec3), cudaMemcpyHostToDevice);
+    cudaMemcpy(res.normals, (void *)normals.data(), normals.size()*sizeof(cVec3), cudaMemcpyHostToDevice);
     
 
     std::cout<<"Start kd-tree building"<<std::endl;
@@ -761,13 +843,16 @@ extern "C" void cuda_ray_trace_from_camera(int w, int h, Vec3 (*cameraSpaceToWor
 
     std::cout<<"w : "<<w<<" h : "<<h<<" w*h : "<<w*h<<std::endl;
 
+    int nbth = 5;
+
     //cuda_ray_trace<<<h,w>>>(cudaPos, cudaDirTab, cudaImage, w);
 
-    int nbBlock = std::ceil((w*h) / (32.0*32.0));
+    int nbBlock = std::ceil((w*h) / (nbth*nbth));
+    //nbBlock = 5;
 
     std::cout<<"Nb block : "<<nbBlock<<std::endl;
 
-    dim3 threadsPerBlock(32, 32);
+    dim3 threadsPerBlock(nbth, nbth);
     dim3 numBlocks(nbBlock, 1);
 
     cuda_ray_trace<<<numBlocks,threadsPerBlock>>>(cudaPos, cudaDirTab, cudaImage, h*w, pcd);

@@ -17,7 +17,7 @@
 CIBLE = tp
 SRCS =  src/Camera.cpp tp.cpp src/Trackball.cpp  \
 	cuda/cudaRayMarching.cu
-LIBS =  -g -L/usr/lib -lglut -lGLU -lGL -lm -lpthread -lgsl -lgslcblas
+LIBS =  -g -L/usr/lib -lglut -lGLU -lGL -lm -lpthread -lgsl -lgslcblas -lcudart
 
 #########################################################"
 

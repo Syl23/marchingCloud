@@ -21,6 +21,7 @@
 #include <string>
 #include <cstdio>
 #include <cstdlib>
+#include <cuda_runtime.h>
 
 #include <GL/glut.h>
 #include <float.h>
@@ -92,8 +93,8 @@ PointCloudData pcd;
 // -------------------------------------------
 
 static GLint window;
-static unsigned int SCREENWIDTH = 300;
-static unsigned int SCREENHEIGHT = 400;
+static unsigned int SCREENWIDTH = 116;
+static unsigned int SCREENHEIGHT = 126;
 static Camera camera;
 static bool mouseRotatePressed = false;
 static bool mouseMovePressed = false;
@@ -329,8 +330,18 @@ void key (unsigned char keyPressed, int x, int y) {
         break;
 
     case 'r':
+        long unsigned int used, free;
         camera.apply();
+
+        cudaMemGetInfo(&used, &free);
+        std::cout << "Avant\n"<<"Mémoire GPU utilisée : " << used / 1073741824.0 << " Go" << std::endl;
+        std::cout << "Mémoire GPU disponible : " << free / 1073741824.0 << " Go" << std::endl;
+
         cuda_ray_trace_from_camera(glutGet(GLUT_WINDOW_WIDTH),glutGet(GLUT_WINDOW_HEIGHT),&cameraSpaceToWorldSpace, &screen_space_to_worldSpace, pcd);
+        
+        cudaMemGetInfo(&used, &free);
+        std::cout << "Après\n"<<"Mémoire GPU utilisée : " << used / 1073741824.0 << " Go" << std::endl;
+        std::cout << "Mémoire GPU disponible : " << free / 1073741824.0 << " Go" << std::endl;
 
         //ray_trace_from_camera();
         break;
@@ -771,8 +782,8 @@ int main (int argc, char ** argv) {
 
     {
         // Load a first pointset, and build a kd-tree:
-        //loadPN("pointsets/igea_subsampled_extreme.pn" , positions , normals);
-        loadPN("pointsets/igea.pn" , positions , normals);
+        loadPN("pointsets/igea_subsampled_extreme.pn" , positions , normals);
+        //loadPN("pointsets/igea.pn" , positions , normals);
 
         //cudaMain();
         //testCuda();
