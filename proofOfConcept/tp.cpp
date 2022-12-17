@@ -31,6 +31,17 @@
 
 #include "src/matrixUtilities.h"
 
+
+extern "C" struct Material{
+    Vec3 AMBIANT_COLOR = Vec3(0,0,0);
+    Vec3 DIFFUSE_COLOR= Vec3(0.5,0.5,0.5);
+    Vec3 SPECULAR_COLOR= Vec3(0.5,0.5,0.5);
+
+    int SPECULAR_EXPONENT = 32;
+    float transparency = 0.0;
+    float refractionIndex = 1.0;
+};
+
 extern "C" struct kd_tree_node{
     int ind;
 
@@ -50,11 +61,13 @@ extern "C" struct cVec3 {
 
 extern "C" struct PointCloudData{
     kd_tree_node* kdTree;
+    char* materialIndex;
+    Material* materialList;
     cVec3 * positions;
     cVec3 * normals;
 };
 
-extern "C" PointCloudData getGPUpcd(std::vector<Vec3> positions, std::vector<Vec3> normals);
+extern "C" PointCloudData getGPUpcd(std::vector<Vec3> positions, std::vector<Vec3> normals, std::vector<char> materialIndex, std::vector<Material> materialList);
 
 extern "C" void testCuda();
 extern "C" std::vector<kd_tree_node> make_kd_tree(std::vector<Vec3> dots);
@@ -782,8 +795,116 @@ int main (int argc, char ** argv) {
 
     {
         // Load a first pointset, and build a kd-tree:
-        loadPN("pointsets/igea_subsampled_extreme.pn" , positions , normals);
-        //loadPN("pointsets/igea.pn" , positions , normals);
+        //loadPN("pointsets/igea_subsampled_extreme.pn" , positions , normals);
+
+
+        loadPN("pointsets/igea.pn" , positions , normals);
+
+        auto materialIndex = std::vector<char>(positions.size(),0);
+        auto materialList = std::vector<Material>();
+
+
+        int size = positions.size();
+        for(int i = 0 ; i < size ; i++){
+            positions.push_back(positions[i] + Vec3(0.8,0,0));
+            normals.push_back(normals[i]);
+            materialIndex.push_back(1);
+        }
+
+
+        Material gold;
+        gold.AMBIANT_COLOR = Vec3(0.24725, 0.1995, 0.0745);
+        gold.DIFFUSE_COLOR = Vec3(0.75164, 0.60648, 0.22648);
+        gold.SPECULAR_COLOR = Vec3(0.628281, 0.555802, 0.366065);
+        gold.SPECULAR_EXPONENT = 51.2;
+        gold.transparency = 0.0;
+        gold.refractionIndex = 0.0;
+
+        Material silver;
+        silver.AMBIANT_COLOR = Vec3(0.19225, 0.19225, 0.19225);
+        silver.DIFFUSE_COLOR = Vec3(0.50754, 0.50754, 0.50754);
+        silver.SPECULAR_COLOR = Vec3(0.508273, 0.508273, 0.508273);
+        silver.SPECULAR_EXPONENT = 51.2;
+        silver.transparency = 0.0;
+        silver.refractionIndex = 0.0;
+
+        Material emerald;
+        emerald.AMBIANT_COLOR = Vec3(0.0215, 0.1745, 0.0215);
+        emerald.DIFFUSE_COLOR = Vec3(0.07568, 0.61424, 0.07568);
+        emerald.SPECULAR_COLOR = Vec3(0.633, 0.727811, 0.633);
+        emerald.SPECULAR_EXPONENT = 76.8;
+        emerald.transparency = 0.0;
+        emerald.refractionIndex = 0.0;
+
+        Material obsidian;
+        obsidian.AMBIANT_COLOR = Vec3(0.05375, 0.05, 0.06625);
+        obsidian.DIFFUSE_COLOR = Vec3(0.18275, 0.17, 0.22525);
+        obsidian.SPECULAR_COLOR = Vec3(0.332741, 0.328634, 0.346435);
+        obsidian.SPECULAR_EXPONENT = 38.4;
+        obsidian.transparency = 0.0;
+        obsidian.refractionIndex = 0.0;
+
+        Material metal;
+        metal.AMBIANT_COLOR = Vec3(0.3, 0.3, 0.3);
+        metal.DIFFUSE_COLOR = Vec3(0.4, 0.4, 0.4);
+        metal.SPECULAR_COLOR = Vec3(0.8, 0.8, 0.8);
+        metal.SPECULAR_EXPONENT = 128;
+        metal.transparency = 0.0;
+        metal.refractionIndex = 0.0;
+
+        Material rubber;
+        rubber.AMBIANT_COLOR = Vec3(0.05, 0.05, 0.05);
+        rubber.DIFFUSE_COLOR = Vec3(0.5, 0.5, 0.5);
+        rubber.SPECULAR_COLOR = Vec3(0.1, 0.1, 0.1);
+        rubber.SPECULAR_EXPONENT = 4;
+        rubber.transparency = 0.0;
+        rubber.refractionIndex = 0.0;
+
+        Material marble;
+        marble.AMBIANT_COLOR = Vec3(0.1, 0.1, 0.1);
+        marble.DIFFUSE_COLOR = Vec3(0.4, 0.4, 0.4);
+        marble.SPECULAR_COLOR = Vec3(0.8, 0.8, 0.8);
+        marble.SPECULAR_EXPONENT = 32;
+        marble.transparency = 0.0;
+        marble.refractionIndex = 0.0;
+
+        Material chalk;
+        chalk.AMBIANT_COLOR = Vec3(0.1, 0.1, 0.1);
+        chalk.DIFFUSE_COLOR = Vec3(0.9, 0.9, 0.9);
+        chalk.SPECULAR_COLOR = Vec3(0.2, 0.2, 0.2);
+        chalk.SPECULAR_EXPONENT = 8;
+        chalk.transparency = 0.0;
+        chalk.refractionIndex = 0.0;
+
+        Material glass;
+        glass.AMBIANT_COLOR = Vec3(0.05, 0.05, 0.05);
+        glass.DIFFUSE_COLOR = Vec3(0.1, 0.1, 0.1);
+        glass.SPECULAR_COLOR = Vec3(0.9, 0.9, 0.9);
+        glass.SPECULAR_EXPONENT = 128;
+        glass.transparency = 0.9;
+        glass.refractionIndex = 1.5;
+
+        Material plastic;
+        plastic.AMBIANT_COLOR = Vec3(0.1, 0.1, 0.1);
+        plastic.DIFFUSE_COLOR = Vec3(0.6, 0.6, 0.6);
+        plastic.SPECULAR_COLOR = Vec3(0.9, 0.9, 0.9);
+        plastic.SPECULAR_EXPONENT = 64;
+        plastic.transparency = 0.7;
+        plastic.refractionIndex = 1.3;
+
+        Material water;
+        water.AMBIANT_COLOR = Vec3(0.1, 0.1, 0.1);
+        water.DIFFUSE_COLOR = Vec3(0.4, 0.4, 0.4);
+        water.SPECULAR_COLOR = Vec3(0.8, 0.8, 0.8);
+        water.SPECULAR_EXPONENT = 32;
+        water.transparency = 0.9;
+        water.refractionIndex = 1.333;
+
+
+
+        materialList.push_back(gold);
+        materialList.push_back(emerald);
+
 
         //cudaMain();
         //testCuda();
@@ -807,7 +928,7 @@ int main (int argc, char ** argv) {
         //loadPN("pointsets/dino_subsampled_extreme.pn" , positions2 , normals2);
 //        kdtree.build(positions);
 
-        pcd = getGPUpcd(positions,normals);
+        pcd = getGPUpcd(positions,normals,materialIndex,materialList);
 
         // std::cout<<"Start kd-tree building"<<std::endl;
         // auto my_kd_tree = make_kd_tree(positions);
@@ -862,11 +983,9 @@ int main (int argc, char ** argv) {
         //     HPSS(positions2[i],positions2[i],normals2[i],positions,normals,kdtree,0,1000,10,20);
         // }
 
-        exportOFF(mesh_pos, mesh_triangles);
-
+        //exportOFF(mesh_pos, mesh_triangles);
 
     }
-
 
 
     glutMainLoop ();
